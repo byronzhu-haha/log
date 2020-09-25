@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	"net"
 	"os"
 	"strings"
 	"sync"
@@ -24,6 +25,61 @@ type Logger interface {
 	Close()
 }
 
+var (
+	filepath = "./log/"
+	filename = time.Now().Format("060102150405") + "_" + localIP() + ".log"
+	opt      = Options{
+		isPrint:     true,
+		isWroteFile: true,
+		flushSec:    defaultFlushSec,
+		filePath:    filepath,
+		fileName:    filename,
+	}
+	vlog Logger = newLogger(opt)
+)
+
+func localIP() string {
+	localAddrs, err := net.InterfaceAddrs()
+	if err != nil {
+		println(err.Error())
+	}
+	var ip = "localhost"
+	for _, address := range localAddrs {
+		ipn, ok := address.(*net.IPNet)
+		if !ok {
+			continue
+		}
+		if ipn.IP.IsLoopback() {
+			continue
+		}
+		if ipn.IP.To4() != nil {
+			ip = ipn.IP.String()
+			break
+		}
+	}
+	return ip
+}
+
+func Printf(format string, v ...interface{}) {
+	vlog.Printf(format, v...)
+}
+
+func Infof(format string, v ...interface{}) {
+	vlog.Infof(format, v...)
+}
+
+func Debugf(format string, v ...interface{}) {
+	vlog.Debugf(format, v...)
+}
+
+func Warnf(format string, v ...interface{}) {
+	vlog.Warnf(format, v...)
+}
+
+func Errorf(format string, v ...interface{}) {
+	vlog.Errorf(format, v...)
+}
+
 type logger struct {
 	opt  Options
 	file *os.File
@@ -33,25 +89,42 @@ type logger struct {
 }
 
 func NewLogger(opts ...Option) Logger {
-	l := &logger{}
+	option := Options{}
 	for _, opt := range opts {
-		l.opt = opt(l.opt)
+		option = opt(option)
 	}
-	if l.opt.isWroteFile {
-		if l.opt.filePath != "." {
-			l.mkdir()
-		} else if !strings.HasSuffix(l.opt.filePath, string(os.PathSeparator)) {
-			l.opt.filePath += string(os.PathSeparator)
-		}
-		f, err := os.OpenFile(l.opt.filePath + l.opt.fileName, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-		if err != nil {
-			panic(err)
-		}
-		l.buf = &bytes.Buffer{}
-		l.file = f
-		l.wr = bufio.NewWriter(f)
-		go l.backgroundWrite()
+
+	return newLogger(option)
+}
+
+func newLogger(opt Options) Logger {
+	l := &logger{
+		opt: opt,
 	}
+	if !l.opt.isWroteFile {
+		return l
+	}
+	if l.opt.filePath == "" {
+		l.opt.filePath = filepath
+	}
+	if l.opt.fileName == "" {
+		l.opt.fileName = filename
+	}
+	if l.opt.flushSec == 0 {
+		l.opt.flushSec = defaultFlushSec
+	}
+	if !strings.HasSuffix(l.opt.filePath, string(os.PathSeparator)) {
+		l.opt.filePath += string(os.PathSeparator)
+	}
+	l.mkdir()
+	f, err := os.OpenFile(l.opt.filePath+l.opt.fileName, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	if err != nil {
+		panic(err)
+	}
+	l.buf = &bytes.Buffer{}
+	l.file = f
+	l.wr = bufio.NewWriter(f)
+	go l.backgroundWrite()
 	return l
 }
 
@@ -140,7 +213,7 @@ func (l *logger) mkdir() {
 	f, err := os.Stat(l.opt.filePath)
 	if err != nil || f.IsDir() == false {
 		if err := os.Mkdir(l.opt.filePath, os.ModePerm); err != nil {
-			panic("日志目录创建失败, "+err.Error())
+			panic("日志目录创建失败, " + err.Error())
 		}
 	}
 }

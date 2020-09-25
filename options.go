@@ -24,15 +24,23 @@ func OpenWriteFile() Option {
 	}
 }
 
-func LogFilePath(path string) Option {
+func Filepath(path string) Option {
 	return func(o Options) Options {
+		if path == "" {
+			o.filePath = filepath
+			return o
+		}
 		o.filePath = path
 		return o
 	}
 }
 
-func LogFileName(name string) Option {
+func FileName(name string) Option {
 	return func(o Options) Options {
+		if name == "" {
+			o.fileName = filename
+			return o
+		}
 		o.fileName = name
 		return o
 	}
@@ -40,7 +48,12 @@ func LogFileName(name string) Option {
 
 func FlushSec(sec int32) Option {
 	return func(o Options) Options {
+		if sec == 0 {
+			o.flushSec = defaultFlushSec
+			return o
+		}
 		o.flushSec = sec
+
 		return o
 	}
 }
